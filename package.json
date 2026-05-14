@@ -1,0 +1,43 @@
+{
+  "name": "@reshimu/atzmutos",
+  "version": "0.1.0",
+  "description": "Atzmut OS — runtime governance MCP server for autonomous agents",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "atzmutos": "./dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@reshimu/aryeh": "file:../aryeh",
+    "@reshimu/nesher": "^0.1.0",
+    "@reshimu/panim-adam": "file:../panim-adam",
+    "@reshimu/shor": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Reshimu",
+  "license": "MIT"
+}
