@@ -1,69 +1,40 @@
-// DECISION: We scan data/beiur/*.json at call time rather than maintaining an
-// index because beiur volume per session is expected to be low (hundreds, not
-// millions). A full glob+parse is cheap enough and avoids index drift bugs.
+import { getSession, getInterceptsBySession, getBeiursBySession } from '../storage/index.js'
+import type { Covenant, InterceptEvent, BeiurReport } from '../storage/schema.js'
 
-import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { readSession, readVerdictsBySession, BEIUR_DIR } from '../store.js'
-import type { BeiurRecord, VerdictRecord } from '../store.js'
-
-export interface SessionReportResult {
-  session: import('../store.js').SessionRecord
-  // # DECISION: full verdict array vs. summary table — returning the full
-  // VerdictRecord[] array preserves all classifier detail for replay and
-  // forensics. A summary table (decision counts, timeline) is a natural next
-  // step for sessions with high intercept volume but is deferred until there
-  // is a concrete caller need.
-  interceptCount: number
-  verdicts: VerdictRecord[]
-  beiurCount: number
-  beiurs: BeiurRecord[]
+export interface SessionReportInput {
+  sessionId: string
 }
 
-export interface SessionReportError {
-  error: string
+export interface SessionReportOutput {
+  sessionId: string
+  covenant: Covenant | null
+  summary: {
+    totalIntercepts: number
+    passed: number
+    passedWithLog: number
+    blocked: number
+    escalated: number
+    beiurReportsFiled: number
+    beiursPending: number
+  }
+  events: InterceptEvent[]
+  beiurReports: BeiurReport[]
 }
 
-export async function sessionReport(
-  sessionId: string,
-): Promise<SessionReportResult | SessionReportError> {
-  const session = await readSession(sessionId)
-  if (!session) {
-    return { error: `session not found: ${sessionId}` }
+export async function sessionReport(input: SessionReportInput): Promise<SessionReportOutput> {
+  const covenant = getSession(input.sessionId)
+  const events = getInterceptsBySession(input.sessionId)
+  const beiurReports = getBeiursBySession(input.sessionId)
+
+  const summary = {
+    totalIntercepts: events.length,
+    passed: events.filter((e) => e.decision === 'PASS').length,
+    passedWithLog: events.filter((e) => e.decision === 'PASS_WITH_LOG').length,
+    blocked: events.filter((e) => e.decision === 'BLOCK').length,
+    escalated: events.filter((e) => e.decision === 'ESCALATE').length,
+    beiurReportsFiled: beiurReports.length,
+    beiursPending: beiurReports.filter((r) => r.status === 'PENDING').length,
   }
 
-  // Scan all beiur files and collect those belonging to this session
-  let entries: string[] = []
-  try {
-    entries = await readdir(BEIUR_DIR)
-  } catch {
-    // Directory may not exist yet — treat as empty
-    entries = []
-  }
-
-  const beiurs: BeiurRecord[] = []
-  for (const entry of entries) {
-    if (!entry.endsWith('.json')) continue
-    try {
-      const raw = await readFile(join(BEIUR_DIR, entry), 'utf8')
-      const record = JSON.parse(raw) as BeiurRecord
-      if (record.sessionId === sessionId) {
-        beiurs.push(record)
-      }
-    } catch {
-      // Skip unreadable/malformed files
-    }
-  }
-
-  const verdicts = await readVerdictsBySession(sessionId)
-  // Sort ascending by timestamp (earliest first — chronological replay)
-  verdicts.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-
-  return {
-    session,
-    interceptCount: verdicts.length,
-    verdicts,
-    beiurCount: beiurs.length,
-    beiurs,
-  }
+  return { sessionId: input.sessionId, covenant, summary, events, beiurReports }
 }

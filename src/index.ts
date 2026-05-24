@@ -2,111 +2,86 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js'
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 
-import type { ScopeDefinition } from '@reshimu/aryeh'
-import { runInterceptLogged } from './intercept.js'
-import { readSession, writeSession, writeBeiur } from './store.js'
+import { registerSession } from './tools/register-session.js'
+import { intercept } from './tools/intercept.js'
+import { classifyAction } from './tools/classify-action.js'
+import { fileBeiur } from './tools/file-beiur.js'
+import { getCovenant } from './tools/get-covenant.js'
 import { sessionReport } from './tools/session-report.js'
 import { auditQuery } from './tools/audit-query.js'
-import { classifyAction } from './tools/classify-action.js'
-
-// ─── Server ───────────────────────────────────────────────────────────────────
 
 const server = new Server(
   { name: 'atzmutos', version: '0.1.0' },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {} } },
 )
-
-// ─── Tool Definitions ─────────────────────────────────────────────────────────
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'atzmutos_register_session',
-      description:
-        'Register a new agent session with Atzmut OS. Returns a sessionId used in all subsequent calls.',
+      description: 'Register an agent session with a covenant defining intent, authorized tools, and scope.',
       inputSchema: {
         type: 'object',
         properties: {
-          agentId: { type: 'string', description: 'Identifier for the agent instance.' },
-          covenant: {
-            type: 'object',
-            description: 'Scope covenant: allowedTools, deniedTools, allowedDomains, deniedDomains, allowedActions, deniedActions, allowedResources, deniedResources, strictMode.',
-          },
-          metadata: { type: 'object', description: 'Optional key-value metadata.' },
+          agentId: { type: 'string' },
+          intent: { type: 'string' },
+          authorizedTools: { type: 'array', items: { type: 'string' } },
+          authorizedScope: { type: 'array', items: { type: 'string' } },
+          expiresAt: { type: 'string' },
+          metadata: { type: 'object' },
         },
-        required: ['agentId'],
+        required: ['agentId', 'intent', 'authorizedTools', 'authorizedScope'],
       },
     },
     {
       name: 'atzmutos_intercept',
-      description:
-        'Run an action through all four Chayyot (NESHER + SHOR + ARYEH + PANIM ADAM) and return a unified ChayyotVerdict.',
+      description: 'Classify a proposed agent action through all four Chayyot validators and return a governance decision.',
       inputSchema: {
         type: 'object',
         properties: {
-          sessionId: { type: 'string', description: 'Active session ID.' },
-          action: { type: 'string', description: 'Verb describing the action (e.g. "delete", "send_email").' },
-          tool: { type: 'string', description: 'Tool name invoking the action. When provided, passed as StructuredAction to ARYEH so deniedTools rules are evaluated.' },
-          target: { type: 'string', description: 'Object of the action (e.g. "user_records").' },
-          output: { type: 'string', description: 'Agent output text to ground-check via SHOR. Must be paired with context.' },
-          context: { type: 'string', description: 'Source context for SHOR grounding.' },
-          environment: {
-            type: 'string',
-            enum: ['production', 'staging', 'development', 'test'],
-            description: 'Execution environment. "production" elevates NESHER risk.',
-          },
-          scope: {
-            type: 'object',
-            description: 'Override scope for ARYEH. If omitted, uses the covenant from register_session.',
-          },
-          metadata: { type: 'object', description: 'Extra context forwarded to NESHER.' },
+          sessionId: { type: 'string' },
+          tool: { type: 'string' },
+          input: { type: 'object' },
+          outputSummary: { type: 'string' },
+          sources: { type: 'array', items: { type: 'string' } },
         },
-        required: ['sessionId', 'action'],
+        required: ['sessionId', 'tool', 'input'],
       },
     },
     {
       name: 'atzmutos_classify_action',
-      description:
-        'Stateless preview classification through NESHER + SHOR (if output+context) + ARYEH (if covenantScope). No session write, no Beiur filed.',
+      description: 'Classify an action in preview mode without requiring an active session. For testing and inspection.',
       inputSchema: {
         type: 'object',
         properties: {
-          action: { type: 'string', description: 'Verb describing the action.' },
-          tool: { type: 'string', description: 'Tool name. When provided with covenantScope, passed as StructuredAction to ARYEH.' },
-          output: { type: 'string', description: 'Agent output text for SHOR grounding. Requires context.' },
-          context: { type: 'string', description: 'Source context for SHOR grounding.' },
-          covenantScope: { type: 'object', description: 'ScopeDefinition for ARYEH evaluation.' },
+          tool: { type: 'string' },
+          input: { type: 'object' },
+          outputSummary: { type: 'string' },
+          sources: { type: 'array', items: { type: 'string' } },
         },
-        required: ['action'],
+        required: ['tool', 'input'],
       },
     },
     {
       name: 'atzmutos_file_beiur',
-      description:
-        'Record a Beiur (clarification) for a flagged intercept verdict. Stored to data/beiur/ as JSON.',
+      description: 'File a Beiur Report for manual human review of a gray-zone agent action.',
       inputSchema: {
         type: 'object',
         properties: {
-          actionId: { type: 'string', description: 'The actionId from a prior ChayyotVerdict.' },
           sessionId: { type: 'string' },
-          beiur: { type: 'string', description: 'Human or supervisor clarification text.' },
-          override: {
-            type: 'string',
-            enum: ['ALLOW', 'BLOCK'],
-            description: 'Optional explicit override of the original verdict.',
-          },
+          tool: { type: 'string' },
+          input: { type: 'object' },
+          reason: { type: 'string' },
+          eventId: { type: 'string' },
         },
-        required: ['actionId', 'sessionId', 'beiur'],
+        required: ['sessionId', 'tool', 'input', 'reason'],
       },
     },
     {
       name: 'atzmutos_get_covenant',
-      description: 'Retrieve the scope covenant registered for a session.',
+      description: 'Retrieve the covenant for an active session.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -117,8 +92,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'atzmutos_session_report',
-      description:
-        'Return the session record and all associated Beiur filings for a given sessionId.',
+      description: 'Get a structured report of all intercepts and Beiur Reports for a session.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -129,153 +103,87 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'atzmutos_audit_query',
-      description: 'Query the Beiur audit log. Requires at least sessionId or actionId.',
+      description: 'Query the audit log across sessions by time range, decision type, or tool name.',
       inputSchema: {
         type: 'object',
         properties: {
-          sessionId: { type: 'string', description: 'Filter by session.' },
-          actionId: { type: 'string', description: 'Filter by action.' },
-          decision: {
-            type: 'string',
-            enum: ['ALLOW', 'BLOCK'],
-            description: 'Filter by beiur override value.',
-          },
-          since: {
-            type: 'string',
-            description: 'ISO 8601 timestamp. Only return records filed at or after this time.',
-          },
-          limit: { type: 'number', description: 'Max records to return. Default 50, max 200.' },
-          verdicts: {
-            type: 'boolean',
-            description: 'When true and sessionId is provided, include VerdictRecords for the session alongside Beiur results.',
-          },
+          sessionId: { type: 'string' },
+          decision: { type: 'string', enum: ['PASS', 'PASS_WITH_LOG', 'BLOCK', 'ESCALATE'] },
+          tool: { type: 'string' },
+          since: { type: 'string' },
+          until: { type: 'string' },
+          limit: { type: 'number' },
         },
       },
     },
   ],
 }))
 
-// ─── Tool Handlers ────────────────────────────────────────────────────────────
-
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params
   const a = (args ?? {}) as Record<string, unknown>
 
+  function ok(data: unknown) {
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }] }
+  }
+
   switch (name) {
-    case 'atzmutos_register_session': {
-      const sessionId = `session_${Date.now()}`
-      await writeSession({
-        sessionId,
-        agentId: String(a.agentId ?? ''),
-        covenant: (a.covenant as Record<string, unknown> | null) ?? null,
-        metadata: (a.metadata as Record<string, unknown>) ?? {},
-        createdAt: new Date().toISOString(),
-      })
-      return ok({ sessionId, status: 'registered' })
-    }
+    case 'atzmutos_register_session':
+      return ok(await registerSession({
+        agentId: String(a['agentId'] ?? ''),
+        intent: String(a['intent'] ?? ''),
+        authorizedTools: (a['authorizedTools'] as string[]) ?? [],
+        authorizedScope: (a['authorizedScope'] as string[]) ?? [],
+        expiresAt: a['expiresAt'] !== undefined ? String(a['expiresAt']) : undefined,
+        metadata: a['metadata'] as Record<string, unknown> | undefined,
+      }))
 
-    case 'atzmutos_intercept': {
-      const sessionId = String(a.sessionId ?? '')
-      const actionId = `action_${Date.now()}`
+    case 'atzmutos_intercept':
+      return ok(await intercept({
+        sessionId: String(a['sessionId'] ?? ''),
+        tool: String(a['tool'] ?? ''),
+        input: (a['input'] as Record<string, unknown>) ?? {},
+        outputSummary: a['outputSummary'] !== undefined ? String(a['outputSummary']) : undefined,
+        sources: a['sources'] as string[] | undefined,
+      }))
 
-      // Resolve scope: inline override takes precedence, then session covenant
-      let scope = (a.scope as ScopeDefinition | undefined) ?? undefined
-      if (scope === undefined) {
-        const session = await readSession(sessionId)
-        scope = session?.covenant ?? undefined
-      }
+    case 'atzmutos_classify_action':
+      return ok(await classifyAction({
+        tool: String(a['tool'] ?? ''),
+        input: (a['input'] as Record<string, unknown>) ?? {},
+        outputSummary: a['outputSummary'] !== undefined ? String(a['outputSummary']) : undefined,
+        sources: a['sources'] as string[] | undefined,
+      }))
 
-      const verdict = await runInterceptLogged(
-        {
-          sessionId,
-          action: String(a.action ?? ''),
-          tool: a.tool !== undefined ? String(a.tool) : undefined,
-          target: a.target !== undefined ? String(a.target) : undefined,
-          output: a.output !== undefined ? String(a.output) : undefined,
-          context: a.context !== undefined ? String(a.context) : undefined,
-          environment: a.environment !== undefined ? String(a.environment) : undefined,
-          scope,
-          metadata: (a.metadata as Record<string, unknown>) ?? {},
-        },
-        actionId,
-      )
+    case 'atzmutos_file_beiur':
+      return ok(await fileBeiur({
+        sessionId: String(a['sessionId'] ?? ''),
+        tool: String(a['tool'] ?? ''),
+        input: (a['input'] as Record<string, unknown>) ?? {},
+        reason: String(a['reason'] ?? ''),
+        eventId: a['eventId'] !== undefined ? String(a['eventId']) : undefined,
+      }))
 
-      return ok(verdict)
-    }
+    case 'atzmutos_get_covenant':
+      return ok(await getCovenant({ sessionId: String(a['sessionId'] ?? '') }))
 
-    case 'atzmutos_classify_action': {
-      const result = classifyAction({
-        action: String(a.action ?? ''),
-        tool: a.tool !== undefined ? String(a.tool) : undefined,
-        output: a.output !== undefined ? String(a.output) : undefined,
-        context: a.context !== undefined ? String(a.context) : undefined,
-        covenantScope: a.covenantScope as ScopeDefinition | undefined,
-      })
-      return ok(result)
-    }
+    case 'atzmutos_session_report':
+      return ok(await sessionReport({ sessionId: String(a['sessionId'] ?? '') }))
 
-    case 'atzmutos_file_beiur': {
-      const actionId = String(a.actionId ?? '')
-      const sessionId = String(a.sessionId ?? '')
-      const beiurText = String(a.beiur ?? '')
-      const rawOverride = a.override as string | undefined
-      const override =
-        rawOverride === 'ALLOW' || rawOverride === 'BLOCK' ? rawOverride : null
-
-      if (!actionId || !sessionId || !beiurText) {
-        return ok({ error: 'actionId, sessionId, and beiur are required' })
-      }
-
-      const beiurId = `beiur_${Date.now()}`
-      await writeBeiur({
-        beiurId,
-        actionId,
-        sessionId,
-        beiur: beiurText,
-        override,
-        filedAt: new Date().toISOString(),
-      })
-
-      return ok({ beiurId, actionId, override, status: 'filed' })
-    }
-
-    case 'atzmutos_get_covenant': {
-      const session = await readSession(String(a.sessionId ?? ''))
-      if (!session) return ok({ error: 'session not found', covenant: null })
-      return ok({ covenant: session.covenant })
-    }
-
-    case 'atzmutos_session_report': {
-      const result = await sessionReport(String(a.sessionId ?? ''))
-      return ok(result)
-    }
-
-    case 'atzmutos_audit_query': {
-      const result = await auditQuery({
-        sessionId: a.sessionId !== undefined ? String(a.sessionId) : undefined,
-        actionId: a.actionId !== undefined ? String(a.actionId) : undefined,
-        decision: a.decision !== undefined ? String(a.decision) : undefined,
-        since: a.since !== undefined ? String(a.since) : undefined,
-        limit: typeof a.limit === 'number' ? a.limit : undefined,
-        verdicts: a.verdicts === true,
-      })
-      return ok(result)
-    }
+    case 'atzmutos_audit_query':
+      return ok(await auditQuery({
+        sessionId: a['sessionId'] !== undefined ? String(a['sessionId']) : undefined,
+        decision: a['decision'] as 'PASS' | 'PASS_WITH_LOG' | 'BLOCK' | 'ESCALATE' | undefined,
+        tool: a['tool'] !== undefined ? String(a['tool']) : undefined,
+        since: a['since'] !== undefined ? String(a['since']) : undefined,
+        until: a['until'] !== undefined ? String(a['until']) : undefined,
+        limit: typeof a['limit'] === 'number' ? a['limit'] : undefined,
+      }))
 
     default:
       throw new Error(`Unknown tool: ${name}`)
   }
 })
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function ok(data: unknown) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
-  }
-}
-
-// ─── Boot ─────────────────────────────────────────────────────────────────────
 
 async function main() {
   const transport = new StdioServerTransport()
