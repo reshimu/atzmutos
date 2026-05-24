@@ -3,5 +3,8 @@ dist/
 data/sessions/
 data/beiur/
 data/verdicts/
+data/*.json
 *.js.map
 coverage/
+.claude/
+.mcp.json
