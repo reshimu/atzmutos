@@ -1,0 +1,496 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://reshimu.ai/schemas/atzmutos-audit/v1",
+  "title": "AtzmutOS Audit Log Entry",
+  "description": "One record per intercepted agent action. Written at intercept time regardless of pass/block outcome. All four Chayyot outputs captured in full.",
+  "type": "object",
+  "required": [
+    "auditId",
+    "schemaVersion",
+    "sessionId",
+    "timestamp",
+    "action",
+    "intercept",
+    "chayyot",
+    "outcome"
+  ],
+
+  "properties": {
+
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0.0",
+      "description": "Schema version. Increment on breaking changes."
+    },
+
+    "auditId": {
+      "type": "string",
+      "description": "Unique ID for this audit record. Format: audit-{ulid}",
+      "examples": ["audit-01J2KXYZ1234ABCDEF567890"]
+    },
+
+    "sessionId": {
+      "type": "string",
+      "description": "ID of the Atzmut OS session this action belongs to. Links to session registry."
+    },
+
+    "timestamp": {
+      "type": "object",
+      "required": ["interceptStart", "interceptEnd"],
+      "description": "All times ISO 8601 UTC. Used for latency benchmarking.",
+      "properties": {
+        "interceptStart": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the action entered the intercept pipeline."
+        },
+        "interceptEnd": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the final pass/block decision was emitted."
+        },
+        "totalLatencyMs": {
+          "type": "number",
+          "description": "Computed: interceptEnd - interceptStart in milliseconds."
+        }
+      }
+    },
+
+    "action": {
+      "type": "object",
+      "required": ["actionId", "tool", "intentDescription", "parameters"],
+      "description": "The raw agent action as submitted to the intercept pipeline.",
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "description": "ID assigned by the orchestrator. Preserved for traceability."
+        },
+        "tool": {
+          "type": "string",
+          "description": "The tool or MCP function the agent is attempting to invoke.",
+          "examples": ["write_file", "execute_sql", "send_email", "delete_record"]
+        },
+        "intentDescription": {
+          "type": "string",
+          "description": "Natural language description of what the agent declared as its intent for this action."
+        },
+        "parameters": {
+          "type": "object",
+          "description": "The raw parameters passed to the tool. Captured as-submitted, before any modification.",
+          "additionalProperties": true
+        },
+        "orchestratorId": {
+          "type": "string",
+          "description": "Identifier of the orchestration framework or agent runner (e.g. LangGraph, AutoGen, custom)."
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Identity of the specific agent that submitted the action."
+        },
+        "parentActionId": {
+          "type": ["string", "null"],
+          "description": "If this action was spawned by a subagent, the actionId of the parent call. Null for root-level actions."
+        }
+      }
+    },
+
+    "chayyot": {
+      "type": "object",
+      "required": ["aryeh", "shor", "nesher", "panimAdam"],
+      "description": "Full classification output from all four Chayyot. All four run regardless of prior decisions (no short-circuit) to preserve exhaust completeness.",
+
+      "properties": {
+
+        "aryeh": {
+          "type": "object",
+          "required": ["verdict", "latencyMs"],
+          "description": "ARYEH — scope and boundary enforcement. Did this action fall within the declared scope of this session?",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": ["IN_SCOPE", "BOUNDARY", "OUT_OF_SCOPE"],
+              "description": "IN_SCOPE: action matches declared tools/intent. BOUNDARY: marginal match, within tolerance. OUT_OF_SCOPE: action exceeds or contradicts declared scope."
+            },
+            "scopeScore": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Continuous score. 1.0 = perfect scope match. Below configured threshold triggers OUT_OF_SCOPE verdict."
+            },
+            "declaredTools": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "The tools declared as in-scope for this session at registration time."
+            },
+            "matchedTools": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Which declared tools this action matched against."
+            },
+            "driftCandidates": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Tools this action resembles that were NOT declared. The near-miss signal. Empty if no candidates found."
+            },
+            "scopeDriftVector": {
+              "type": ["string", "null"],
+              "description": "If scope drift detected, a human-readable description of what the action is attempting beyond declared scope.",
+              "examples": ["Agent scoped to read-only CRM access attempting write operation", "Task scoped to summarization attempting external API call"]
+            },
+            "latencyMs": {
+              "type": "number",
+              "description": "Time ARYEH took to classify this action, in milliseconds."
+            }
+          }
+        },
+
+        "shor": {
+          "type": "object",
+          "required": ["verdict", "latencyMs"],
+          "description": "SHOR — grounding and anti-hallucination. Is the agent's claimed state of the world traceable to real entities in the output context?",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": ["GROUNDED", "PARTIAL", "UNGROUNDED", "INDETERMINATE"],
+              "description": "GROUNDED: all claimed entities verifiable in context. PARTIAL: some entities unverifiable. UNGROUNDED: claimed completion/state has no traceable entity support. INDETERMINATE: insufficient context to classify."
+            },
+            "groundednessScore": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Fraction of claimed entities that are verifiable. 1.0 = fully grounded."
+            },
+            "entitiesExtracted": {
+              "type": "array",
+              "description": "All entities extracted from the action context by SHOR's deterministic extractor. No LLM involved.",
+              "items": {
+                "type": "object",
+                "required": ["entity", "grounded"],
+                "properties": {
+                  "entity": { "type": "string" },
+                  "grounded": { "type": "boolean" },
+                  "sourceRef": {
+                    "type": ["string", "null"],
+                    "description": "Where in the context this entity was found. Null if ungrounded."
+                  }
+                }
+              }
+            },
+            "hallucination_signals": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Specific signals that triggered PARTIAL or UNGROUNDED. E.g. 'claimed file creation with no filesystem evidence', 'cited API response not present in context'.",
+              "examples": ["Agent declared task complete; no output artifact found in context", "Claimed to have sent email; no SMTP call in tool trace"]
+            },
+            "noLlmUsed": {
+              "type": "boolean",
+              "const": true,
+              "description": "Attestation that SHOR classification used only deterministic entity extraction. Always true — architectural invariant."
+            },
+            "latencyMs": {
+              "type": "number",
+              "description": "Time SHOR took to classify, in milliseconds."
+            }
+          }
+        },
+
+        "nesher": {
+          "type": "object",
+          "required": ["verdict", "latencyMs"],
+          "description": "NESHER — irreversibility shielding. Can this action be undone?",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": ["SAFE", "CAUTION", "CRITICAL"],
+              "description": "SAFE: read-only or fully reversible. CAUTION: write with clear rollback path. CRITICAL: irreversible or requires external state change that cannot be recalled."
+            },
+            "reversibilityLevel": {
+              "type": "string",
+              "enum": ["FULLY_REVERSIBLE", "ROLLBACK_AVAILABLE", "PARTIAL_ROLLBACK", "IRREVERSIBLE"],
+              "description": "Finer-grained reversibility classification feeding the SAFE/CAUTION/CRITICAL verdict."
+            },
+            "irreversible": {
+              "type": "boolean",
+              "description": "True if verdict is CRITICAL. Convenience flag for downstream consumers."
+            },
+            "toolRiskCategory": {
+              "type": "string",
+              "enum": ["READ", "WRITE_REVERSIBLE", "WRITE_EXTERNAL", "DELETE", "SCHEMA_CHANGE", "EXTERNAL_API", "SEND_COMMUNICATION", "OTHER"],
+              "description": "Categorical risk bucket for the tool being invoked."
+            },
+            "rollbackPath": {
+              "type": ["string", "null"],
+              "description": "If a rollback exists, description of the path. Null for IRREVERSIBLE.",
+              "examples": ["Soft delete — restore from deleted_at flag", "Transaction log — point-in-time recovery available", null]
+            },
+            "estimatedBlastRadius": {
+              "type": ["string", "null"],
+              "description": "Human-readable estimate of downstream impact if this action executes and cannot be rolled back.",
+              "examples": ["Auth service outage for all downstream services", "Email sent to 4,200 external recipients"]
+            },
+            "latencyMs": {
+              "type": "number",
+              "description": "Time NESHER took to classify, in milliseconds."
+            }
+          }
+        },
+
+        "panimAdam": {
+          "type": "object",
+          "required": ["verdict", "latencyMs"],
+          "description": "PANIM ADAM — gray-zone discernment. Does this action exceed what deterministic classification can resolve?",
+          "properties": {
+            "verdict": {
+              "type": "string",
+              "enum": ["CLEAR", "GRAY_ZONE", "ESCALATE"],
+              "description": "CLEAR: deterministic Chayyot are sufficient; no human judgment required. GRAY_ZONE: ambiguous but below escalation threshold. ESCALATE: judgment call that must go to a human via Beiur."
+            },
+            "grayZoneScore": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Confidence that human judgment is needed. Above configured threshold triggers ESCALATE."
+            },
+            "grayZoneCategory": {
+              "type": ["string", "null"],
+              "enum": ["PII_EXPOSURE", "POLICY_AMBIGUITY", "ETHICAL_BOUNDARY", "MULTI_STAKEHOLDER", "REGULATORY", "NOVEL_ACTION_CLASS", null],
+              "description": "Why this is a gray zone. Null if verdict is CLEAR."
+            },
+            "escalationReason": {
+              "type": ["string", "null"],
+              "description": "Human-readable explanation of why PANIM ADAM is escalating. Becomes the summary section of the Beiur report.",
+              "examples": ["Export scope expanded to include personal email and support history. Data category ambiguous — outreach list or PII dossier requiring DPA review."]
+            },
+            "beiurFiled": {
+              "type": "boolean",
+              "description": "Whether a Beiur report was filed as a result of this intercept."
+            },
+            "latencyMs": {
+              "type": "number",
+              "description": "Time PANIM ADAM took to classify, in milliseconds."
+            }
+          }
+        }
+
+      }
+    },
+
+    "intercept": {
+      "type": "object",
+      "required": ["decision", "decidingChayyah"],
+      "description": "The pipeline's final pass/block decision, synthesized across all four Chayyot.",
+      "properties": {
+        "decision": {
+          "type": "string",
+          "enum": ["PASS", "BLOCK", "ESCALATE", "PASS_WITH_LOG"],
+          "description": "PASS: action cleared. BLOCK: action halted by a Chayyah. ESCALATE: routed to Beiur/human. PASS_WITH_LOG: cleared but flagged for audit review (CAUTION-level)."
+        },
+        "decidingChayyah": {
+          "type": ["string", "null"],
+          "enum": ["ARYEH", "SHOR", "NESHER", "PANIM_ADAM", null],
+          "description": "Which Chayyah drove the final decision. Null if PASS with no flags."
+        },
+        "blockReason": {
+          "type": ["string", "null"],
+          "description": "Human-readable reason for a BLOCK decision. Null if PASS."
+        },
+        "modifiedAction": {
+          "type": ["object", "null"],
+          "description": "If a Beiur resolution resulted in an altered action being passed instead, the modified parameters. Null otherwise.",
+          "additionalProperties": true
+        }
+      }
+    },
+
+    "outcome": {
+      "type": "object",
+      "required": ["status"],
+      "description": "What ultimately happened. Populated at resolution time — may be written after the initial intercept record.",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["EXECUTED", "BLOCKED", "AWAITING_BEIUR", "RESOLVED_APPROVED", "RESOLVED_DENIED", "RESOLVED_ALTERED", "TIMED_OUT"],
+          "description": "Terminal state of this action."
+        },
+        "beiurReportId": {
+          "type": ["string", "null"],
+          "description": "ID of the associated Beiur report if one was filed. Links to the beiur store."
+        },
+        "beiurResolution": {
+          "type": ["string", "null"],
+          "enum": ["approved", "denied", "altered", null],
+          "description": "Human resolution of the Beiur. Null if no Beiur filed or still pending."
+        },
+        "beiurResolvedBy": {
+          "type": ["string", "null"],
+          "description": "Identity of the human principal who resolved the Beiur."
+        },
+        "beiurResolutionTimestamp": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "When the Beiur was resolved. Used to compute time-to-resolution metric."
+        },
+        "executionResult": {
+          "type": ["string", "null"],
+          "enum": ["SUCCESS", "FAILURE", "PARTIAL", null],
+          "description": "If the action was executed (EXECUTED or RESOLVED_APPROVED), whether it succeeded. Populated by callback from the execution layer."
+        }
+      }
+    },
+
+    "covenant": {
+      "type": "object",
+      "description": "Snapshot of the session covenant at time of intercept. Captured here so audit records are self-contained even if the covenant later changes.",
+      "properties": {
+        "covenantId": { "type": "string" },
+        "atzmusIntent": {
+          "type": "string",
+          "description": "The root human intent this session is meant to serve."
+        },
+        "declaredScope": {
+          "type": "string",
+          "description": "Declared scope of permitted actions at session registration."
+        },
+        "declaredTools": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "covenantVersion": {
+          "type": "integer",
+          "description": "Increments if the covenant was modified mid-session."
+        }
+      }
+    },
+
+    "benchmarkFlags": {
+      "type": "object",
+      "description": "Derived fields precomputed at write time to make benchmarking queries cheap. All derivable from other fields — treat as a materialized view.",
+      "properties": {
+        "anyChayahFired": {
+          "type": "boolean",
+          "description": "True if any Chayyah returned a non-PASS signal."
+        },
+        "chayotFired": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ARYEH", "SHOR", "NESHER", "PANIM_ADAM"]
+          },
+          "description": "Which Chayyot returned a non-trivial verdict (OUT_OF_SCOPE / UNGROUNDED / CRITICAL / ESCALATE)."
+        },
+        "isNearMiss": {
+          "type": "boolean",
+          "description": "True if any Chayyah returned BOUNDARY / PARTIAL / CAUTION / GRAY_ZONE but the action was ultimately passed. These are the near-miss events — highest signal for drift detection."
+        },
+        "requiresGroundTruthLabel": {
+          "type": "boolean",
+          "description": "Flag for labeling queue. True if this record should be reviewed by a human to assign a ground-truth correct/incorrect label for classifier accuracy benchmarking."
+        },
+        "groundTruthLabel": {
+          "type": ["string", "null"],
+          "enum": ["TRUE_POSITIVE", "TRUE_NEGATIVE", "FALSE_POSITIVE", "FALSE_NEGATIVE", null],
+          "description": "Human-assigned label after review. Null until labeled. Used to compute precision/recall per Chayyah."
+        },
+        "groundTruthLabeledBy": {
+          "type": ["string", "null"],
+          "description": "Who assigned the ground truth label."
+        }
+      }
+    }
+
+  },
+
+  "examples": [
+    {
+      "schemaVersion": "1.0.0",
+      "auditId": "audit-01J2KXYZ1234ABCDEF567890",
+      "sessionId": "session-infra-chris-r-20260515",
+      "timestamp": {
+        "interceptStart": "2026-05-15T14:02:11.000Z",
+        "interceptEnd": "2026-05-15T14:02:11.047Z",
+        "totalLatencyMs": 47
+      },
+      "action": {
+        "actionId": "act-infra-007",
+        "tool": "execute_sql",
+        "intentDescription": "Execute production schema migration: drop legacy auth columns",
+        "parameters": {
+          "query": "ALTER TABLE users DROP COLUMN legacy_token, DROP COLUMN auth_v1_hash",
+          "database": "prod-auth-db",
+          "environment": "production"
+        },
+        "agentId": "agent-infra-001",
+        "orchestratorId": "langgraph-v0.1",
+        "parentActionId": null
+      },
+      "chayyot": {
+        "aryeh": {
+          "verdict": "BOUNDARY",
+          "scopeScore": 0.61,
+          "declaredTools": ["execute_sql", "read_schema"],
+          "matchedTools": ["execute_sql"],
+          "driftCandidates": [],
+          "scopeDriftVector": "Session scoped to staging migration; action targets production environment",
+          "latencyMs": 8
+        },
+        "shor": {
+          "verdict": "GROUNDED",
+          "groundednessScore": 0.95,
+          "entitiesExtracted": [
+            { "entity": "users.legacy_token", "grounded": true, "sourceRef": "schema_inspection_result_t-04" },
+            { "entity": "users.auth_v1_hash", "grounded": true, "sourceRef": "schema_inspection_result_t-04" }
+          ],
+          "hallucination_signals": [],
+          "noLlmUsed": true,
+          "latencyMs": 11
+        },
+        "nesher": {
+          "verdict": "CRITICAL",
+          "reversibilityLevel": "IRREVERSIBLE",
+          "irreversible": true,
+          "toolRiskCategory": "SCHEMA_CHANGE",
+          "rollbackPath": null,
+          "estimatedBlastRadius": "Auth service failure for all downstream services. Point-in-time restore required — estimated 4hr RTO.",
+          "latencyMs": 6
+        },
+        "panimAdam": {
+          "verdict": "ESCALATE",
+          "grayZoneScore": 0.88,
+          "grayZoneCategory": "MULTI_STAKEHOLDER",
+          "escalationReason": "Irreversible production schema migration requires engineering lead authorization. Blast radius exceeds single-team scope.",
+          "beiurFiled": true,
+          "latencyMs": 22
+        }
+      },
+      "intercept": {
+        "decision": "ESCALATE",
+        "decidingChayyah": "NESHER",
+        "blockReason": "Irreversible production schema change. NESHER CRITICAL + PANIM ADAM ESCALATE.",
+        "modifiedAction": null
+      },
+      "outcome": {
+        "status": "RESOLVED_ALTERED",
+        "beiurReportId": "beiur-nesher-184",
+        "beiurResolution": "altered",
+        "beiurResolvedBy": "chris.r",
+        "beiurResolutionTimestamp": "2026-05-15T16:44:00.000Z",
+        "executionResult": null
+      },
+      "covenant": {
+        "covenantId": "covenant-infra-001",
+        "atzmusIntent": "Migrate auth service database schema to support multi-tenancy without service disruption",
+        "declaredScope": "Schema migration on auth-db, staging first, production only after dry-run validation and human sign-off",
+        "declaredTools": ["execute_sql", "read_schema"],
+        "covenantVersion": 1
+      },
+      "benchmarkFlags": {
+        "anyChayahFired": true,
+        "chayotFired": ["NESHER", "PANIM_ADAM"],
+        "isNearMiss": false,
+        "requiresGroundTruthLabel": true,
+        "groundTruthLabel": null,
+        "groundTruthLabeledBy": null
+      }
+    }
+  ]
+}
