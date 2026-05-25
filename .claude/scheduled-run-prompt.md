@@ -23,3 +23,8 @@
 
 # HARD RULE: main is unprotected at the GitHub level. You MUST NOT
 # commit, merge, or push to main. Output is one feature branch + one PR.
+
+# SCOPE LOCK: Implement ONLY what the punch list item literally states.
+# Edit only the files named in the item. Make no related, helpful, or
+# opportunistic changes. If unsure whether something is in scope, leave it.
+# Commit messages must be exactly '<ITEM-ID>: <description>' - no prefixes.
