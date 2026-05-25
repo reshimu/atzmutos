@@ -301,6 +301,7 @@ NESHER call:
   import { classify as nesherClassify } from '@reshimu/nesher'
   Pass: { action: input.tool, target: JSON.stringify(input.input) }
   Map result to: { level: result.level, irreversible: result.irreversible ?? false, escalate: result.escalate ?? false }
+  NESHER emits: SAFE | CAUTION | CRITICAL | BLOCKED
 
 SHOR call:
   import { classify as shorClassify } from '@reshimu/shor'
@@ -327,7 +328,7 @@ PANIM ADAM inline logic:
   Else: { level: 'PASS', isGrayZone: false, reason: 'no gray zone indicators' }
 
 DECISION LOGIC (in order — first match wins):
-  1. nesher.level === 'CRITICAL' → BLOCK, reason: 'irreversible action blocked by NESHER'
+  1. nesher.level === 'CRITICAL' || nesher.level === 'BLOCKED' → BLOCK, reason: 'irreversible action blocked by NESHER'
   2. shor.level === 'UNGROUNDED' → BLOCK, reason: 'ungrounded output blocked by SHOR'
   3. aryeh.level === 'BLOCK' → BLOCK, reason: aryeh.reason
   4. panimAdam.isGrayZone → ESCALATE, reason: panimAdam.reason
