@@ -8,3 +8,7 @@ data/*.json
 coverage/
 .claude/settings.local.json
 .mcp.json
+
+# Build system run artifacts
+.claude/run-*.log
+.claude/run-builder.ps1
