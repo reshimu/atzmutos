@@ -6,7 +6,7 @@ Gaps identified by comparing spec against src/.
 
 ---
 
-- [ ] AT-1 | AGENT | risk:low | Fix `package.json` test script from `"vitest"` to `"vitest run"` so `npm test` exits cleanly in TTY instead of entering watch mode (spec explicitly specifies `vitest run`)
+- [x] AT-1 | AGENT | risk:low | Fix `package.json` test script from `"vitest"` to `"vitest run"` so `npm test` exits cleanly in TTY instead of entering watch mode (spec explicitly specifies `vitest run`)  -> PR #1
 - [ ] AT-2 | DECISION | risk:low | Delete `src/store.ts` — legacy stub with `export {}`, not in spec scaffold, not imported anywhere
 - [ ] AT-3 | DECISION | risk:low | Delete `src/intercept.ts` — legacy stub with `export {}`, not in spec scaffold, not imported anywhere
 - [ ] AT-4 | DECISION | risk:low | Delete `src/types/chayyot-verdict.ts` — legacy stub with `export {}`, not in spec scaffold, not imported anywhere
