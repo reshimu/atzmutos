@@ -37,10 +37,11 @@ export async function auditQuery(input: AuditQueryInput): Promise<AuditQueryOutp
     events = events.filter((e) => e.timestamp <= input.until!)
   }
 
+  const matchedTotal = events.length
   events = events.slice(0, effectiveLimit)
 
   const eventIds = new Set(events.map((e) => e.eventId))
   const beiurReports = readBeiurs().reports.filter((r) => eventIds.has(r.eventId))
 
-  return { total: events.length, events, beiurReports }
+  return { total: matchedTotal, events, beiurReports }
 }
