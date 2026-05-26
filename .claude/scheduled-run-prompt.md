@@ -28,3 +28,7 @@
 # Edit only the files named in the item. Make no related, helpful, or
 # opportunistic changes. If unsure whether something is in scope, leave it.
 # Commit messages must be exactly '<ITEM-ID>: <description>' - no prefixes.
+
+# RELEASE POLICY: You MUST NOT publish packages. No npm publish, no
+# PyPI upload, no pushing release tags. You may bump versions and open
+# a PR, but a human runs the final publish. Releases are never autonomous.
