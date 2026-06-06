@@ -14,3 +14,7 @@
 | 2026-05-31 | - | - | idle | no eligible items |
 | 2026-06-01 | - | - | idle | no eligible items |
 | 2026-06-02 | - | - | idle | no eligible items |
+| 2026-06-03 | - | - | idle | no eligible items |
+| 2026-06-04 | - | - | idle | no eligible items |
+| 2026-06-05 | - | - | idle | no eligible items |
+| 2026-06-06 | - | - | idle | no eligible items |
