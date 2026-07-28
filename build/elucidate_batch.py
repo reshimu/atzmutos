@@ -35,12 +35,22 @@ Spec: ATZMUTOS_elucidate-batch_build-pack.md (repo root).
 """
 import argparse
 import base64
+import json
 import re
 import subprocess
 import sys
 import unicodedata
+import urllib.request
+import html
 from html import escape
 from pathlib import Path
+
+
+def esc(s: str) -> str:
+    """HTML-escape after stripping nikud -- per Shimon's 2026-07-28 request,
+    nekudos are removed from all displayed Hebrew throughout. Safe to apply
+    universally: the nikud Unicode range never appears in English text."""
+    return escape(strip_nikud(s))
 
 REPO = Path(__file__).resolve().parent.parent
 SOURCE_DIR = REPO / "source uploads"
@@ -59,6 +69,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation",
         date_parsha="Shabbos Parshas Eikev, 16 Menachem Av 5743",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="47. Re'ay 5748 Rebbe's Maamor.pdf", slug="reeh-5748",
@@ -66,6 +77,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation",
         date_parsha="Shabbos Parshas Re'eh, Elul 5748",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="48. Shoftim 5729 Rebbe's Maamor.pdf", slug="shoftim-5729",
@@ -73,6 +85,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation",
         date_parsha="Shabbos Parshas Shoftim, Elul 5729",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="49. Ki Seitzei 5725 Rebbe's Maamor.pdf", slug="ki-seitzei-5725",
@@ -80,6 +93,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation (brief synopsis)",
         date_parsha="Shabbos Parshas Ki Seitzei, Elul 5725",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="50. Ki Sovoi 5743 - Rebbe's Maamor.pdf", slug="ki-savo-5743",
@@ -87,6 +101,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation",
         date_parsha="Shabbos Parshas Ki Savo 5743",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="51. Nitzovim 5748 Rebbe's Maamor.pdf", slug="nitzavim-5748",
@@ -94,6 +109,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation",
         date_parsha="Shabbos Parshas Nitzavim, Tishrei 5748",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="52. Vayeilech 5749 Rebbe's Maamor.pdf", slug="vayeilech-5749",
@@ -101,6 +117,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation",
         date_parsha="Shabbos Parshas Vayeilech / Shabbos Shuva, Tishrei 5749",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
     dict(
         file="53. Haazinu 5725 Rebbe's Maamor.pdf", slug="haazinu-5725",
@@ -108,6 +125,7 @@ DOCS = [
         genre="Maamor — free translation & elucidation (Rebbe Maharash yohrtzeit maamar)",
         date_parsha="Shabbos Parshas Haazinu, Tishrei 5725",
         mugah="bilti-mugah",
+        default_book="Deuteronomy",
     ),
 ]
 
@@ -126,10 +144,14 @@ GEMATRIA_VALUES = {
 NIKUD_RANGE = (0x0591, 0x05C7)
 
 
+MAQAF = '־'  # Hebrew word-joining hyphen -- punctuation, not a vowel point;
+                   # stripping it fuses adjacent words (e.g. בכל־שעריך -> בכלשעריך)
+
+
 def strip_nikud(s: str) -> str:
     return ''.join(
         c for c in unicodedata.normalize('NFD', s)
-        if not (NIKUD_RANGE[0] <= ord(c) <= NIKUD_RANGE[1])
+        if c == MAQAF or not (NIKUD_RANGE[0] <= ord(c) <= NIKUD_RANGE[1])
     )
 
 
@@ -140,6 +162,107 @@ def gematria_value(word: str) -> int:
 GEMATRIA_MENTION_RE = re.compile(r'gematria|numerical value', re.IGNORECASE)
 HEBREW_LETTER = r'א-ת'
 HEBREW_RUN_RE = re.compile(rf'[{HEBREW_LETTER}][{HEBREW_LETTER}֑-ׇ\s\'"׳״‘’“”]*[{HEBREW_LETTER}]')
+
+
+# ---------------------------------------------------------------------------
+# Sefaria verification for possuk citations. The source PDFs' own Hebrew
+# extraction is corrupted at the syllable level (pdftotext inserts spurious
+# spaces between nikud-bearing glyph clusters, a PDF-generation artifact, not
+# something introduced here -- see session notes). Since every possuk-anchored
+# unit quotes an actual Tanach verse, the correct fix is to verify the citation
+# against Sefaria (a canonical, independently-checkable digital Tanach) and use
+# ITS text, rather than trying to heuristically un-mangle uncertain spacing.
+# Falls back to the extracted text, nikud stripped, when no citation is found
+# or the network call fails -- never fabricated, never silently guessed.
+# ---------------------------------------------------------------------------
+SEFARIA_BOOK_MAP = {
+    "bereishis": "Genesis", "beraishis": "Genesis", "bereshis": "Genesis",
+    "shmos": "Exodus", "shemos": "Exodus",
+    "vayikra": "Leviticus",
+    "bamidbor": "Numbers", "bamidbar": "Numbers",
+    "devorim": "Deuteronomy", "devarim": "Deuteronomy",
+    "yeshaya": "Isaiah", "yeshayahu": "Isaiah",
+    "yirmiyahu": "Jeremiah",
+    "yechezkel": "Ezekiel",
+    "hoshea": "Hosea",
+    "zecharia": "Zechariah", "zechariah": "Zechariah",
+    "tehillim": "Psalms",
+    "mishlei": "Proverbs",
+    "koheles": "Ecclesiastes", "kohelet": "Ecclesiastes",
+}
+CITATION_RE = re.compile(
+    r'\((?:([A-Za-z]+)\.?\s+)?(\d{1,3}):(\d{1,3})(?:[-–](\d{1,3}))?\)'
+)
+SEFARIA_CACHE_PATH = Path(__file__).resolve().parent / "assets" / "sefaria_cache.json"
+_sefaria_cache: dict = {}
+_sefaria_cache_loaded = False
+
+
+def _load_sefaria_cache() -> None:
+    global _sefaria_cache, _sefaria_cache_loaded
+    if _sefaria_cache_loaded:
+        return
+    if SEFARIA_CACHE_PATH.exists():
+        _sefaria_cache = json.loads(SEFARIA_CACHE_PATH.read_text(encoding="utf-8"))
+    _sefaria_cache_loaded = True
+
+
+def _save_sefaria_cache() -> None:
+    SEFARIA_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SEFARIA_CACHE_PATH.write_text(
+        json.dumps(_sefaria_cache, ensure_ascii=False, indent=1), encoding="utf-8"
+    )
+
+
+def fetch_sefaria_verse(book_en: str, chap: int, v1: int, v2: int | None) -> str | None:
+    """Return verified Hebrew text for book_en chap:v1(-v2), or None if
+    unavailable (unknown ref, network failure) -- caller falls back to the
+    extracted text rather than blocking or guessing."""
+    _load_sefaria_cache()
+    ref = f"{book_en}.{chap}.{v1}-{v2}" if v2 else f"{book_en}.{chap}.{v1}"
+    if ref in _sefaria_cache:
+        return _sefaria_cache[ref] or None
+    url = f"https://www.sefaria.org/api/v3/texts/{ref}?version=hebrew"
+    try:
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        pieces = []
+        for v in data.get("versions", []):
+            t = v.get("text")
+            if t:
+                pieces = t if isinstance(t, list) else [t]
+                break
+        cleaned = []
+        for p in pieces:
+            p = re.sub(r'<[^>]+>', '', p)  # strip footnote tags Sefaria embeds inline
+            p = html.unescape(p)           # decode &nbsp; / &thinsp; / etc.
+            cleaned.append(p)
+        text = " ".join(cleaned).strip()
+        text = text or None
+    except Exception:
+        text = None
+    _sefaria_cache[ref] = text or ""
+    _save_sefaria_cache()
+    return text
+
+
+def verify_possuk_against_sefaria(heb_fallback: str, context_text: str,
+                                   default_book: str | None = None) -> str:
+    """If context_text (the paired footnote/elucidation) names a parseable
+    Tanach citation, return Sefaria's verified text for it; otherwise return
+    heb_fallback (the source extraction) unchanged. A citation with no book
+    name (e.g. "(16:18)", common when the maamar cites its own weekly
+    parsha) falls back to default_book, the document's own parsha."""
+    m = CITATION_RE.search(context_text)
+    if not m:
+        return heb_fallback
+    book = SEFARIA_BOOK_MAP.get(m.group(1).lower()) if m.group(1) else default_book
+    if not book:
+        return heb_fallback
+    chap, v1 = int(m.group(2)), int(m.group(3))
+    v2 = int(m.group(4)) if m.group(4) else None
+    verified = fetch_sefaria_verse(book, chap, v1, v2)
+    return verified if verified else heb_fallback
 
 
 def verify_gematria_mentions(text: str) -> str:
@@ -262,7 +385,8 @@ INLINE_MARKER_RE = re.compile(
 
 
 def process_paragraph(para: str, footnote_entries: list[str], cursor: int,
-                       blocks: list[dict], seen_concepts: set) -> int:
+                       blocks: list[dict], seen_concepts: set,
+                       default_book: str | None = None) -> int:
     """Walk one body paragraph left to right, pairing each footnote marker with
     the possuk-unit it falls inside (or emitting it as a standalone rail-note /
     concept box when the paragraph has no possuk to attach to). Returns the
@@ -359,9 +483,17 @@ def process_paragraph(para: str, footnote_entries: list[str], cursor: int,
         # trailing "....4 <stray char>" debris where the source has no real
         # sentence terminator before the next possuk's marker+quote begins
         en_clean = TRAILING_DEBRIS_RE.sub('', en_clean).strip()
+        # Only search concept-box text for a citation, and only near its start
+        # ("Possuk: (ref) ..." is the consistent pattern) -- notes/rail text
+        # can carry an unrelated cross-reference citation (e.g. "With the
+        # words: (17:7)...") that must never be mistaken for this unit's own
+        # possuk. A wrong match here means a confidently-wrong verse, which is
+        # worse than the honest-but-imperfect extracted text.
+        citation_context = next((b[:60] for b in u["boxes"] if CITATION_RE.search(b[:60])), "")
+        heb_verified = verify_possuk_against_sefaria(u["heb"], citation_context, default_book)
         blocks.append({
             "kind": "unit",
-            "heb": u["heb"],
+            "heb": heb_verified,
             "en": verify_gematria_mentions(en_clean),
             "eluc": u["notes"][0] if u["notes"] else "",
             "extra_rail": u["notes"][1:],
@@ -374,6 +506,36 @@ def process_paragraph(para: str, footnote_entries: list[str], cursor: int,
         blocks.append({"kind": "prose", "text": verify_gematria_mentions(tail)})
 
     return cursor
+
+
+# Translator-credit / website-list front matter, per Shimon's 2026-07-28
+# request to drop this from every document. It's genuinely in the source
+# (not fabricated by removing it) but is administrative boilerplate, not
+# maamar content -- repeated almost verbatim across all 8 files.
+BOILERPLATE_SIGNATURES = [
+    "free translation of maamor",
+    "translated by mendy levy",
+    "translated by menachem",
+    "authored by menachem",
+    "typeset by mendel",
+    "special thanks to",
+    "dvarmalchus.org",
+    "hafotzashamaayonus",
+    "translation reset",
+    "translation republished",
+    "help with the footnotes",
+    "join a mailing list",
+    "please get in touch",
+    "text +44",
+]
+
+
+def is_boilerplate(para: str) -> bool:
+    low = para.lower()
+    if any(sig in low for sig in BOILERPLATE_SIGNATURES):
+        return True
+    domain_hits = len(re.findall(r'\.(?:org|com|il|co\.uk|net)\b', low))
+    return domain_hits >= 3
 
 
 def merge_adjacent_prose(blocks: list[dict]) -> list[dict]:
@@ -389,11 +551,13 @@ def merge_adjacent_prose(blocks: list[dict]) -> list[dict]:
     return merged
 
 
-def possuk_units_for_page(page_text: str, page_num: int, seen_concepts: set) -> tuple[list[dict], bool]:
+def possuk_units_for_page(page_text: str, page_num: int, seen_concepts: set,
+                           default_book: str | None = None) -> tuple[list[dict], bool]:
     """Return (blocks, had_content). Block kinds: "unit" (heb/en/eluc/extra_rail/
     boxes), "prose", "rail-standalone", "concept-standalone"."""
     body_paragraphs, footnote_blocks = split_body_and_footnotes(page_text)
     footnote_entries = split_footnote_entries(footnote_blocks)
+    body_paragraphs = [p for p in body_paragraphs if not is_boilerplate(p)]
 
     if not body_paragraphs and not footnote_blocks:
         return [], False
@@ -401,7 +565,7 @@ def possuk_units_for_page(page_text: str, page_num: int, seen_concepts: set) -> 
     blocks = []
     cursor = 0
     for para in body_paragraphs:
-        cursor = process_paragraph(para, footnote_entries, cursor, blocks, seen_concepts)
+        cursor = process_paragraph(para, footnote_entries, cursor, blocks, seen_concepts, default_book)
 
     return blocks, True
 
@@ -638,9 +802,9 @@ def build_html(doc: dict, pages: list[str]) -> tuple[str, dict]:
     body_parts.append(f"""
 <div class="page-header">
   <div class="org">Chabad of Parkland</div>
-  <div class="heb-title">{escape(doc['heb_title'])}</div>
-  <div class="en-title">{escape(doc['en_title'])}</div>
-  <div class="meta">{escape(doc['genre'])} · {escape(doc['date_parsha'])} · {escape(doc['mugah'])}</div>
+  <div class="heb-title">{esc(doc['heb_title'])}</div>
+  <div class="en-title">{esc(doc['en_title'])}</div>
+  <div class="meta">{esc(doc['genre'])} · {esc(doc['date_parsha'])} · {esc(doc['mugah'])}</div>
 </div>
 """)
     body_parts.append(f"""
@@ -652,7 +816,7 @@ def build_html(doc: dict, pages: list[str]) -> tuple[str, dict]:
 
     seen_concepts: set = set()
     for i, page_text in enumerate(pages, start=1):
-        blocks, had_content = possuk_units_for_page(page_text, i, seen_concepts)
+        blocks, had_content = possuk_units_for_page(page_text, i, seen_concepts, doc.get("default_book"))
         blocks = merge_adjacent_prose(blocks)
         stripped = page_text.strip()
         is_interior = 1 < i < len(pages)
@@ -667,35 +831,35 @@ def build_html(doc: dict, pages: list[str]) -> tuple[str, dict]:
             kind = block["kind"]
             if kind == "prose":
                 body_parts.append(render_row(
-                    f'<div class="prose">{escape(block["text"])}</div>',
+                    f'<div class="prose">{esc(block["text"])}</div>',
                     row_class="prose-row",
                 ))
             elif kind == "rail-standalone":
                 stats["rail_notes"] += 1
                 body_parts.append(render_row(
                     '<div class="prose"></div>',
-                    rail_html=f'<div class="rail-note">{escape(block["text"])}</div>',
+                    rail_html=f'<div class="rail-note">{esc(block["text"])}</div>',
                     row_class="prose-row",
                 ))
             elif kind == "concept-standalone":
                 stats["concept_boxes"] += 1
                 body_parts.append(render_row(
-                    f'<div class="concept"><span class="eyebrow">Concept</span>{escape(block["text"])}</div>',
+                    f'<div class="concept"><span class="eyebrow">Concept</span>{esc(block["text"])}</div>',
                 ))
             else:  # unit
                 stats["units"] += 1
                 main_html = (
                     f'<div class="unit">'
-                    f'<div class="heb">{escape(block["heb"])}</div>'
-                    f'<div class="en">{escape(block["en"])}</div>'
+                    f'<div class="heb">{esc(block["heb"])}</div>'
+                    f'<div class="en">{esc(block["en"])}</div>'
                 )
                 if block["eluc"]:
-                    main_html += f'<div class="eluc">{escape(block["eluc"])}</div>'
+                    main_html += f'<div class="eluc">{esc(block["eluc"])}</div>'
                 for box_text in block["boxes"]:
                     stats["concept_boxes"] += 1
                     main_html += (
                         f'<div class="concept">'
-                        f'<span class="eyebrow">Concept</span>{escape(box_text)}'
+                        f'<span class="eyebrow">Concept</span>{esc(box_text)}'
                         f'</div>'
                     )
                 main_html += "</div>"
@@ -703,7 +867,7 @@ def build_html(doc: dict, pages: list[str]) -> tuple[str, dict]:
                 if block["extra_rail"]:
                     stats["rail_notes"] += len(block["extra_rail"])
                     rail_html = "".join(
-                        f'<div class="rail-note">{escape(n)}</div>' for n in block["extra_rail"]
+                        f'<div class="rail-note">{esc(n)}</div>' for n in block["extra_rail"]
                     )
                 body_parts.append(render_row(main_html, rail_html=rail_html))
 
