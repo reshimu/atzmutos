@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LSP Capture Run Sheet</title>
+<style>
+  @page { size: letter; margin: 0.5in; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.35;
+    color: #111;
+    max-width: 7.5in;
+    margin: 0 auto;
+    padding: 12px;
+    background: #fff;
+  }
+  h1 { font-size: 16pt; margin: 0 0 2px; letter-spacing: -0.3px; }
+  .sub { font-size: 9pt; color: #555; margin-bottom: 10px; }
+  h2 {
+    font-size: 11pt; margin: 14px 0 5px; padding: 3px 6px;
+    background: #111; color: #fff; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  h3 { font-size: 10pt; margin: 9px 0 3px; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+  th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 9.5pt; }
+  th { background: #eee; font-weight: 600; }
+  td.t { width: 62px; font-weight: 600; white-space: nowrap; }
+  td.chk { width: 24px; text-align: center; }
+  ul { margin: 3px 0 6px; padding-left: 18px; }
+  li { margin-bottom: 2px; }
+  .box { border: 2px solid #111; padding: 7px 10px; margin: 8px 0; }
+  .box strong { display: block; margin-bottom: 3px; }
+  .chkline { margin: 2px 0; }
+  .sq { display: inline-block; width: 11px; height: 11px; border: 1.5px solid #333; margin-right: 6px; vertical-align: -1px; }
+  .log td { height: 22px; }
+  .log td:first-child { width: 64px; }
+  .note { font-size: 8.5pt; color: #555; font-style: italic; margin-top: 2px; }
+  .pagebreak { page-break-before: always; }
+  .two { display: flex; gap: 14px; }
+  .two > div { flex: 1; }
+  .kbd { font-family: Consolas, monospace; background: #eee; padding: 0 3px; border: 1px solid #ccc; font-size: 9pt; }
+  @media print { body { padding: 0; } .noprint { display: none; } }
+</style>
+</head>
+<body>
+
+<h1>LSP Capture Run Sheet — Mendy's Live Show</h1>
+<div class="sub">Date: ________________ &nbsp;|&nbsp; Show start: ________ &nbsp;|&nbsp; OBS hotkey: ________ &nbsp;|&nbsp; Files → <span class="kbd">C:\lsp-content\capture\raw\&lt;date&gt;\</span></div>
+
+<h2>1 · Pre-Flight (do before Start Recording)</h2>
+<div class="two">
+<div>
+<div class="chkline"><span class="sq"></span>Browser zoom 100%</div>
+<div class="chkline"><span class="sq"></span>Bookmarks bar hidden (Ctrl+Shift+B)</div>
+<div class="chkline"><span class="sq"></span>Windows Focus Assist ON (no notifications)</div>
+<div class="chkline"><span class="sq"></span>Extra tabs closed, desktop clean</div>
+<div class="chkline"><span class="sq"></span>Nothing with PII behind the browser</div>
+</div>
+<div>
+<div class="chkline"><span class="sq"></span>OBS: 60fps, native res, Display Capture</div>
+<div class="chkline"><span class="sq"></span>Side panel open over Mendy's stream</div>
+<div class="chkline"><span class="sq"></span>10-sec test record → played back OK</div>
+<div class="chkline"><span class="sq"></span>Disk space checked (60min 1440p60 ≈ 15–25 GB)</div>
+<div class="chkline"><span class="sq"></span>Laptop plugged in / sleep disabled</div>
+</div>
+</div>
+
+<div class="box">
+<strong>Two calls to make now — circle one each:</strong>
+DEMO MODE: &nbsp; ON &nbsp;/&nbsp; OFF &nbsp;&nbsp;&nbsp; <span class="note">If OFF, real revenue is on screen — those frames cannot ship publicly.</span><br>
+BIDDER USERNAMES VISIBLE: &nbsp; OK to show &nbsp;/&nbsp; BLUR IN EDIT
+</div>
+
+<h2>2 · Take 1 — Full Screen, Continuous (target 40–60 min)</h2>
+<p class="note">Whatnot stream + LSP side panel together in one frame. Do NOT stop and restart. One long file. Everything gets cut in edit.</p>
+<table>
+  <tr><th class="t">Clock</th><th>Do this</th><th class="chk">✓</th></tr>
+  <tr><td class="t">0:00–0:30</td><td><strong>Cold open.</strong> Hit record 30 sec before you touch anything. Leave the screen still. Gives clean footage for a hook card.</td><td class="chk"></td></tr>
+  <tr><td class="t">0:30–2:00</td><td><strong>Slow establishing pass.</strong> Mouse moves slowly across the panel top to bottom. No clicking. This is your cutaway/b-roll bank — slow motion crops beautifully to 9:16.</td><td class="chk"></td></tr>
+  <tr><td class="t">2:00–5:00</td><td><strong>Stat boxes.</strong> Hover each one, pause 3 sec on each. Let numbers tick up on their own. Don't narrate, don't rush.</td><td class="chk"></td></tr>
+  <tr><td class="t">5:00 →</td><td><strong>Hands off. Let the show run.</strong> Your job now is watching for moments and logging them (section 4). Resist the urge to click around — organic movement beats operated movement.</td><td class="chk"></td></tr>
+  <tr><td class="t">Every ~10 min</td><td><strong>Deliberate 20-sec pass:</strong> one slow scroll of the chat/event feed, then hands off again. Gives editable motion at regular intervals.</td><td class="chk"></td></tr>
+  <tr><td class="t">Last 2 min</td><td><strong>Wind-down.</strong> Slow mouse-out, then hold still 20 sec before stopping. Clean tail for end-cards.</td><td class="chk"></td></tr>
+</table>
+
+<h2>3 · Moments to Watch For (log every one — these are the money shots)</h2>
+<table>
+  <tr><th>Moment</th><th>Why it matters</th><th class="chk">Got it</th></tr>
+  <tr><td>Whale / big spender joins</td><td>Bidder Profiles — the single most demo-able feature</td><td class="chk"></td></tr>
+  <tr><td>Callout or milestone fires</td><td>Live Callouts — proves the product ACTS, not just watches</td><td class="chk"></td></tr>
+  <tr><td>Giveaway executes</td><td>Giveaway Manager, hardest moment to fake</td><td class="chk"></td></tr>
+  <tr><td>Bid spike / auction heats up</td><td>Real-time numbers moving = the whole pitch in 8 seconds</td><td class="chk"></td></tr>
+  <tr><td>Label prints mid-stream</td><td>Midstream Label Printing (film the print if physically possible)</td><td class="chk"></td></tr>
+  <tr><td>Chat surge / reactions spike</td><td>Engagement intelligence, good kinetic-caption material</td><td class="chk"></td></tr>
+  <tr><td>Automation rule triggers</td><td>Action Automation Engine — the action moat</td><td class="chk"></td></tr>
+  <tr><td>Anything that surprises you</td><td>If it made YOU look, it'll make a viewer stop scrolling</td><td class="chk"></td></tr>
+</table>
+
+<h2>4 · Moment Log — write timestamps here as they happen</h2>
+<p class="note">Rough is fine (~14m). This sheet is what turns 60 min of footage into 20 min of editing. Type it up after into <span class="kbd">moments.txt</span>.</p>
+<table class="log">
+  <tr><th style="width:64px">Time</th><th>What happened</th></tr>
+  <tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr>
+  <tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr>
+  <tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr>
+  <tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr>
+  <tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr>
+  <tr><td></td><td></td></tr><tr><td></td><td></td></tr><tr><td></td><td></td></tr>
+</table>
+
+<div class="pagebreak"></div>
+
+<h2>5 · Take 2 — Dashboard Only (10–15 min, same show still live)</h2>
+<p class="note">Web dashboard on its own, full browser window, no Whatnot visible. Reacting to the same live show.</p>
+<table>
+  <tr><th class="t">Clock</th><th>Do this</th><th class="chk">✓</th></tr>
+  <tr><td class="t">0:00–0:20</td><td>Hold still on the loaded dashboard. Clean opening frame.</td><td class="chk"></td></tr>
+  <tr><td class="t">0:20–3:00</td><td>Slow tour: top row of stats → each card → let live data update on its own.</td><td class="chk"></td></tr>
+  <tr><td class="t">3:00–8:00</td><td>One deliberate click-through of each main view. <strong>Pause 4 full seconds</strong> after every click before moving — Remotion needs still frames to zoom into.</td><td class="chk"></td></tr>
+  <tr><td class="t">8:00–12:00</td><td>Park on the busiest live view and leave it. Let numbers move untouched.</td><td class="chk"></td></tr>
+  <tr><td class="t">Last 20 sec</td><td>Hands off screen, hold still, stop.</td><td class="chk"></td></tr>
+</table>
+
+<h2>6 · Take 3 — Optional Physical B-Roll (phone, vertical, 5 min)</h2>
+<p class="note">Only if convenient. Non-UI footage — the one place AI-gen b-roll is allowed, so real footage here saves generation later.</p>
+<div class="chkline"><span class="sq"></span>Label printer spitting a label (10 sec, close up)</div>
+<div class="chkline"><span class="sq"></span>Hands sorting cards / items into trays (15 sec)</div>
+<div class="chkline"><span class="sq"></span>Packed boxes stacking up (10 sec)</div>
+<div class="chkline"><span class="sq"></span>Wide shot of the seller desk with the panel glowing on screen (15 sec)</div>
+
+<h2>7 · Rules That Don't Bend</h2>
+<ul>
+  <li><strong>Record long, cut later.</strong> Storage is cheap; a missed whale join is gone forever.</li>
+  <li><strong>Move slowly.</strong> Fast mouse movement is unusable. Every motion at half your normal speed.</li>
+  <li><strong>Pause after every click</strong> — 4 seconds. Still frames are what let the editor zoom, hold, and caption.</li>
+  <li><strong>Never narrate or apologize on the mic.</strong> No VO in v1; audio gets discarded.</li>
+  <li><strong>Don't chase perfection live.</strong> A missed feature can be re-shot with a scripted Playwright pass later. Live moments cannot.</li>
+</ul>
+
+<h2>8 · Wrap (5 min, before you close the laptop)</h2>
+<div class="chkline"><span class="sq"></span>Copy all files → <span class="kbd">C:\lsp-content\capture\raw\&lt;YYYY-MM-DD&gt;\</span></div>
+<div class="chkline"><span class="sq"></span>OBS → File → Remux Recordings → mkv to mp4</div>
+<div class="chkline"><span class="sq"></span>Type this sheet's moment log into <span class="kbd">moments.txt</span> in the same folder (include the DEMO MODE and BLUR calls at the top)</div>
+<div class="chkline"><span class="sq"></span>Spot-check one file: opens, right resolution, 60fps, no stutter, panel legible</div>
+<div class="chkline"><span class="sq"></span>Back up the raw folder somewhere off this machine</div>
+
+<div class="box" style="margin-top:14px">
+<strong>Total time on your side:</strong> 10 min setup · 40–60 min Take 1 (mostly hands-off, you're watching the show anyway) · 10–15 min Take 2 · 5 min wrap.<br>
+<strong>Next gate:</strong> footage banked → Claude Code Phase 1 scaffold → one proof render → you watch it and we tune caption style and zoom feel.
+</div>
+
+</body>
+</html>
